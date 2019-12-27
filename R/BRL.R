@@ -1,0 +1,149 @@
+#' Beta Record Linkage
+#'
+#' Wrapper function that runs all the steps of beta record linkage: creates comparison data, runs Gibbs sampler,
+#' and derives point estimate of bipartite matching (the final linkage).  The parameters of \code{BRL} consist of 
+#' all the parameters needed to run \code{\link{compData}}, \code{\link{runGibbs}} and \code{\link{linkData}},
+#' except for intermediate input/output, and in addition to a parameter 'burn' for the burn-in period of the Gibbs sampler.
+#' 
+#' @param df1,df2 two data frames to be linked, containing the same number of columns,
+#'				with the same variable names and classes, in the same order.  The columns represent 
+#'				the comparison fields to be used for the linkage.  Currently, only columns of class
+#'				\code{character} and \code{factor} are supported.  Without loss of generality, 
+#' 				\code{df1} is assumed to have no less records than \code{df2}.
+#' 
+#' @param types	a vector of characters indicating the comparison types per comparison field.  The options
+#'				are: \code{"Lev"} for comparisons based on the Levenshtein distance normalized to \eqn{[0,1]}, with \eqn{0}  
+#'				indicating no disagreement and \eqn{1} indicating maximum disagreement; and 
+#'				\code{"bin"} for binary comparisons (agreement/disagreement). 
+#' 				The default is \code{"Lev"} for columns of class \code{character} and \code{"bin"} for columns of class \code{factor}.
+#' 
+#' @param breaks	for comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
+#'				points for the interval \eqn{[0,1]} to obtain \eqn{L+1} levels of disagreement.
+#'				The default is \code{breaks=c(.001,.25,.5)}.
+#' 
+#' @param nIter	number of iterations of Gibbs sampler.
+#' 
+#' @param burn	number of iterations to discard as part of the burn-in period.
+#' 
+#' @param a,b	hyper-parameters of the Dirichlet priors for the \eqn{m} and \eqn{u} parameters
+#' 				in the model for the comparison data among matches and non-matches, respectively.
+#' 				These can be vectors with as many 
+#'				entries as disagreement levels among all comparison fields.  If specified as positive constants, they 
+#'				get recycled to the required length.  If not specified, flat priors are taken.  
+#' 
+#' @param aBM,bBM	hyper-parameters of beta prior on bipartite matchings. Default is \code{aBM=bBM=1}.
+#' 
+#' @param seed	seed to be used for pseudo-random number generation.  By default it sets \code{seed=0}.
+#' 
+#' @param lFNM		individual loss of a false non-match in the loss functions of Sadinle (2017), default \code{lFNM=1}.
+#' 
+#' @param lFM1		individual loss of a false match of type 1 in the loss functions of Sadinle (2017), default \code{lFM1=1}.
+#' 
+#' @param lFM2		individual loss of a false match of type 2 in the loss functions of Sadinle (2017), default \code{lFM2=2}.
+#' 
+#' @param lR		individual loss of 'rejecting' to make a decision in the loss functions of Sadinle (2017), default \code{lR=Inf}.
+#'
+#' 
+#' @details	Beta record linkage (\eqn{\beta}RL, Sadinle, 2017) is a methodology for probabilistic bipartite record linkage, that is, the task of merging two
+#'			duplicate-free datafiles that lack unique identifiers.  This is accomplished by using the common partially identifying information 
+#' 			of the entities contained in the datafiles.  The duplicate-free requirement means that we expect each entity to be represented maximum once in 
+#'			each datafile.  
+#' 
+#' 			The first step of \eqn{\beta}RL, accomplished by the function \code{\link{compData}}, consists of constructing comparison vectors for each pair of records from the two datafiles.  
+#'			The current implementation uses binary comparisons for 
+#' 			fields of class \code{factor}, and Levenshtein-based comparisons for fields of class \code{character}.  
+#' 			This can be easily extended to other comparison types, so a resourceful user should be able to construct an object that recreates 
+#' 			the output of \code{\link{compData}} for other types of comparisons (so long as they get transformed to levels of disagreement), and still be able to run the next step outside 
+#' 			the function \code{BRL}.
+#' 
+#' 			The second step of \eqn{\beta}RL, accomplished by the function \code{\link{runGibbs}}, consists of running a Gibbs sampler that explores the space of bipartite matchings 
+#' 			representing the plausible ways of linking the datafiles.  This sampler is derived from a model for the comparison data and a \emph{beta} prior 
+#' 			distribution on the space of bipartite matchings.  See Sadinle (2017) for details. 
+#' 
+#' 			The third step of \eqn{\beta}RL, accomplished by the function \code{\link{linkData}}, consists of deriving a point estimate of the bipartite matching 
+#' 			(which gives us the way of linking the datafiles) 
+#' 			by minimizing the expected value of 
+#' 			a loss function that uses different penalties for different types of linkage errors.  The current implementation only supports the 
+#' 			Bayes point estimates of bipartite matchings that can be obtained in closed form according to Theorems 1, 2 and 3 of Sadinle (2017).
+#' 			The losses have to be positive numbers and satisfy one of three conditions:
+#' 			\enumerate{
+#' 						\item conditions of Theorem 1 of Sadinle (2017):
+#'						\code{(lR == Inf) & (lFNM <= lFM1) & (lFNM + lFM1 <= lFM2)}
+#' 						\item conditions of Theorem 2 of Sadinle (2017):
+#'						\code{((lFM2 >= lFM1) & (lFM1 >= 2*lR)) | ((lFM1 >= lFNM) & (lFM2 >= lFM1 + lFNM))}
+#' 						\item conditions of Theorem 3 of Sadinle (2017):
+#'						\code{(lFM2 >= lFM1) & (lFM1 >= 2*lR) & (lFNM >= 2*lR)}
+#' 			}
+#' 			If one of the last two conditions is satisfied, the point estimate might be partial, meaning that there
+#' 			might be some records in datafile 2 for which the point estimate does not include a linkage decision.
+#' 			For combinations of losses not supported here, the linear sum assignment problem outlined by Sadinle (2017)
+#' 			needs to be solved.
+#' 
+#' @return 	a vector containing the point estimate of the bipartite matching, as in the output of \code{\link{linkData}}.  If \code{lR != Inf} the output might be a partial estimate.
+#'			A number smaller or equal to \code{n1} in entry \code{j} indicates the record in datafile 1 to which record \code{j} in datafile 2 
+#'			gets linked, a number \code{n1+j} indicates that record \code{j} does not get linked to any record in datafile 1, and the value \code{-1} 
+#'			indicates a 'rejection' to link, meaning that the correct linkage decision is not clear.
+#'  
+#' @references Mauricio Sadinle (2017). Bayesian Estimation of Bipartite Matchings for Record Linkage. \emph{Journal of the
+#' American Statistical Association} 112(518), 600-612.
+#' 
+#' @examples
+#' data(twoFiles)
+#' 
+#' (Zhat <- BRL(df1, df2))
+#' 
+#' n1 <- nrow(df1)
+#' 
+#' Ztrue <- df2ID
+#' 
+#' ## number of links (estimated matches)
+#' nLinks <- sum(Zhat <= n1) 
+#' 
+#' ## number of actual matches according to the ground truth
+#' nMatches <- sum(Ztrue <= n1) 
+#' 
+#' ## number of links that are actual matches
+#' nCorrectLinks <- sum(Zhat[Zhat<=n1]==Ztrue[Zhat<=n1])
+#' 
+#' ## compute measures of performance 
+#' 
+#' ## precision 
+#' nCorrectLinks/nLinks
+#' 
+#' ## recall
+#' nCorrectLinks/nMatches
+#' 
+#' ## the linked record pairs
+#' cbind( df1[Zhat[Zhat<=n1],], df2[Zhat<=n1,] )
+#' 
+#' ## finally, note that we could run BRL step by step as follows
+#' 
+#' ## create comparison data 
+#' myCompData <- compData(df1, df2)
+#' 
+#' ## Gibbs sampling from posterior of bipartite matchings
+#' chain <- runGibbs(myCompData)
+#' 
+#' ## bipartite matching Bayes estimate derived from the loss functions of Sadinle (2017)
+#' Zhat2 <- linkData(chain$Z, n1=n1)
+#' 
+#' identical(Zhat, Zhat2)
+#' 
+
+BRL <- function(df1, df2, types=NULL, breaks=c(.001,.25,.5), 
+				nIter=1000, burn=round(nIter*.1), a=1, b=1, aBM=1, bBM=1, seed=0,
+				lFNM=1, lFM1=1, lFM2=2, lR=Inf){
+	
+	# 'burn' is not a parameter of the other functions, so we control it here
+	if( !is.numeric(burn) | (burn<0) | (burn>=nIter) ) 
+		stop("burn should be an integer that satisfies 0 <= burn < nIter")
+	
+	# create comparison data 
+	myCompData <- compData(df1, df2, types, breaks)
+	# Gibbs sampling from posterior of bipartite matchings
+	chain <- runGibbs(myCompData, nIter, a, b, aBM, bBM, seed)
+	# bipartite matching Bayes estimate derived from the loss functions of Sadinle (2017)
+	Zhat <- linkData(chain$Z[,setdiff(1:nIter,seq_len(burn)),drop=FALSE], n1=nrow(df1), lFNM, lFM1, lFM2, lR)
+	
+	return(Zhat)
+}
