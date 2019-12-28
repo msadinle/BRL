@@ -4,9 +4,23 @@
 \alias{BRL}
 \title{Beta Record Linkage}
 \usage{
-BRL(df1, df2, types = NULL, breaks = c(0.001, 0.25, 0.5),
-  nIter = 1000, burn = round(nIter * 0.1), a = 1, b = 1, aBM = 1,
-  bBM = 1, seed = 0, lFNM = 1, lFM1 = 1, lFM2 = 2, lR = Inf)
+BRL(
+  df1,
+  df2,
+  types = NULL,
+  breaks = c(0.001, 0.25, 0.5),
+  nIter = 1000,
+  burn = round(nIter * 0.1),
+  a = 1,
+  b = 1,
+  aBM = 1,
+  bBM = 1,
+  seed = 0,
+  lFNM = 1,
+  lFM1 = 1,
+  lFM2 = 2,
+  lR = Inf
+)
 }
 \arguments{
 \item{df1, df2}{two data frames to be linked, containing the same number of columns,
@@ -48,46 +62,48 @@ get recycled to the required length.  If not specified, flat priors are taken.}
 \item{lR}{individual loss of 'rejecting' to make a decision in the loss functions of Sadinle (2017), default \code{lR=Inf}.}
 }
 \value{
-a vector containing the point estimate of the bipartite matching, as in the output of \code{\link{linkData}}.  If \code{lR != Inf} the output might be a partial estimate.
+A vector containing the point estimate of the bipartite matching, as in the output of \code{\link{linkRecords}}.  If \code{lR != Inf} the output might be a partial estimate.
 		A number smaller or equal to \code{n1} in entry \code{j} indicates the record in datafile 1 to which record \code{j} in datafile 2 
 		gets linked, a number \code{n1+j} indicates that record \code{j} does not get linked to any record in datafile 1, and the value \code{-1} 
 		indicates a 'rejection' to link, meaning that the correct linkage decision is not clear.
 }
 \description{
-Wrapper function that runs all the steps of beta record linkage: creates comparison data, runs Gibbs sampler,
-and derives point estimate of bipartite matching (the final linkage).  The parameters of \code{BRL} consist of 
-all the parameters needed to run \code{\link{compData}}, \code{\link{runGibbs}} and \code{\link{linkData}},
-except for intermediate input/output, and in addition to a parameter 'burn' for the burn-in period of the Gibbs sampler.
+Beta record linkage methodology for probabilistic bipartite record linkage: the task of merging two duplicate-free 
+datafiles that lack unique identifiers.  
+This function runs all the steps of beta record linkage: creates comparisons of the records, runs Gibbs sampler on bipartite matchings,
+and derives point estimate of bipartite matching (this determines the final linkage).  The parameters of \code{BRL} consist of 
+all the parameters needed to run \code{\link{compareRecords}}, \code{\link{bipartiteGibbs}} and \code{\link{linkRecords}},
+except for intermediate input/output, and in addition to a parameter \code{burn} for the burn-in period of the Gibbs sampler.
 }
 \details{
-Beta record linkage (\eqn{\beta}RL, Sadinle, 2017) is a methodology for probabilistic bipartite record linkage, that is, the task of merging two
+Beta record linkage (BRL, Sadinle, 2017) is a methodology for probabilistic bipartite record linkage, that is, the task of merging two
 		duplicate-free datafiles that lack unique identifiers.  This is accomplished by using the common partially identifying information 
 			of the entities contained in the datafiles.  The duplicate-free requirement means that we expect each entity to be represented maximum once in 
-		each datafile.  
+		each datafile.  This methodology should not be used with datafiles that contain duplicates nor should it be used for deduplicating a single datafile. 
 
-			The first step of \eqn{\beta}RL, accomplished by the function \code{\link{compData}}, consists of constructing comparison vectors for each pair of records from the two datafiles.  
+			The first step of BRL, accomplished by the function \code{\link{compareRecords}}, consists of constructing comparison vectors for each pair of records from the two datafiles.  
 		The current implementation uses binary comparisons for 
 			fields of class \code{factor}, and Levenshtein-based comparisons for fields of class \code{character}.  
 			This can be easily extended to other comparison types, so a resourceful user should be able to construct an object that recreates 
-			the output of \code{\link{compData}} for other types of comparisons (so long as they get transformed to levels of disagreement), and still be able to run the next step outside 
+			the output of \code{\link{compareRecords}} for other types of comparisons (so long as they get transformed to levels of disagreement), and still be able to run the next step outside 
 			the function \code{BRL}.
 
-			The second step of \eqn{\beta}RL, accomplished by the function \code{\link{runGibbs}}, consists of running a Gibbs sampler that explores the space of bipartite matchings 
+			The second step of BRL, accomplished by the function \code{\link{bipartiteGibbs}}, consists of running a Gibbs sampler that explores the space of bipartite matchings 
 			representing the plausible ways of linking the datafiles.  This sampler is derived from a model for the comparison data and a \emph{beta} prior 
 			distribution on the space of bipartite matchings.  See Sadinle (2017) for details. 
 
-			The third step of \eqn{\beta}RL, accomplished by the function \code{\link{linkData}}, consists of deriving a point estimate of the bipartite matching 
-			(which gives us the way of linking the datafiles) 
+			The third step of BRL, accomplished by the function \code{\link{linkRecords}}, consists of deriving a point estimate of the bipartite matching 
+			(which gives us the optimal way of linking the datafiles) 
 			by minimizing the expected value of 
 			a loss function that uses different penalties for different types of linkage errors.  The current implementation only supports the 
 			Bayes point estimates of bipartite matchings that can be obtained in closed form according to Theorems 1, 2 and 3 of Sadinle (2017).
 			The losses have to be positive numbers and satisfy one of three conditions:
 			\enumerate{
-						\item conditions of Theorem 1 of Sadinle (2017):
+						\item Conditions of Theorem 1 of Sadinle (2017):
 					\code{(lR == Inf) & (lFNM <= lFM1) & (lFNM + lFM1 <= lFM2)}
-						\item conditions of Theorem 2 of Sadinle (2017):
+						\item Conditions of Theorem 2 of Sadinle (2017):
 					\code{((lFM2 >= lFM1) & (lFM1 >= 2*lR)) | ((lFM1 >= lFNM) & (lFM2 >= lFM1 + lFNM))}
-						\item conditions of Theorem 3 of Sadinle (2017):
+						\item Conditions of Theorem 3 of Sadinle (2017):
 					\code{(lFM2 >= lFM1) & (lFM1 >= 2*lR) & (lFNM >= 2*lR)}
 			}
 			If one of the last two conditions is satisfied, the point estimate might be partial, meaning that there
@@ -127,13 +143,13 @@ cbind( df1[Zhat[Zhat<=n1],], df2[Zhat<=n1,] )
 ## finally, note that we could run BRL step by step as follows
 
 ## create comparison data 
-myCompData <- compData(df1, df2)
+myCompData <- compareRecords(df1, df2)
 
 ## Gibbs sampling from posterior of bipartite matchings
-chain <- runGibbs(myCompData)
+chain <- bipartiteGibbs(myCompData)
 
 ## bipartite matching Bayes estimate derived from the loss functions of Sadinle (2017)
-Zhat2 <- linkData(chain$Z, n1=n1)
+Zhat2 <- linkRecords(chain$Z, n1=n1)
 
 identical(Zhat, Zhat2)
 
