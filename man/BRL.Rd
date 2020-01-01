@@ -7,6 +7,9 @@
 BRL(
   df1,
   df2,
+  flds = NULL,
+  flds1 = NULL,
+  flds2 = NULL,
   types = NULL,
   breaks = c(0.001, 0.25, 0.5),
   nIter = 1000,
@@ -23,17 +26,33 @@ BRL(
 )
 }
 \arguments{
-\item{df1, df2}{two data frames to be linked, containing the same number of columns,
-with the same variable names and classes, in the same order.  The columns represent 
-the comparison fields to be used for the linkage.  Currently, only columns of class
-\code{character} and \code{factor} are supported.  Without loss of generality, 
-    \code{df1} is assumed to have no less records than \code{df2}.}
+\item{df1, df2}{two datasets to be linked, of class \code{data.frame}, with rows representing records and columns
+representing fields.  Without loss of generality, 
+\code{df1} is assumed to have no less records than \code{df2}.}
 
-\item{types}{a vector of characters indicating the comparison types per comparison field.  The options
-are: \code{"Lev"} for comparisons based on the Levenshtein distance normalized to \eqn{[0,1]}, with \eqn{0}  
+\item{flds}{a vector indicating the fields to be used in the linkage.  Either a \code{character} vector, in which case
+all entries need to be names of columns of \code{df1} and \code{df2}, or a \code{numeric} vector
+indicating the columns in \code{df1} and \code{df2} to be used in the linkage.  If provided as a 
+\code{numeric} vector it is assumed that the columns of \code{df1} and \code{df2} are organized such that 
+it makes sense to compare the columns
+\code{df1[,flds]} and \code{df2[,flds]} in that order.}
+
+\item{flds1, flds2}{vectors indicating the fields of \code{df1} and \code{df2} to be used in the linkage.
+    Either \code{character} vectors, in which case  
+    all entries need to be names of columns of \code{df1} and \code{df2}, respectively, or \code{numeric} vectors
+    indicating the columns in \code{df1} and \code{df2} to be used in the linkage.  It is assumed that
+it makes sense to compare the columns
+    \code{df1[,flds1]} and \code{df2[,flds2]} in that order.  These arguments are ignored if \code{flds} is specified.
+If none of \code{flds,flds1,flds2} are specified, the columns with the same names in \code{df1} and \code{df2} 
+are compared, if any.}
+
+\item{types}{a vector of characters indicating the comparison type per comparison field.  The options
+are: \code{"lv"} for comparisons based on the Levenshtein edit distance normalized to \eqn{[0,1]}, with \eqn{0}  
 indicating no disagreement and \eqn{1} indicating maximum disagreement; and 
-\code{"bin"} for binary comparisons (agreement/disagreement). 
-    The default is \code{"Lev"} for columns of class \code{character} and \code{"bin"} for columns of class \code{factor}.}
+\code{"bi"} for binary comparisons (agreement/disagreement). 
+    The default is \code{"lv"}.  Fields compared with the \code{"lv"} option are first transformed to \code{character}
+class.  Factors with different levels compared using the \code{"bi"} option are transformed to factors with the union 
+    of the levels.}
 
 \item{breaks}{for comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
 points for the interval \eqn{[0,1]} to obtain \eqn{L+1} levels of disagreement.
@@ -82,8 +101,8 @@ Beta record linkage (BRL, Sadinle, 2017) is a methodology for probabilistic bipa
 		each datafile.  This methodology should not be used with datafiles that contain duplicates nor should it be used for deduplicating a single datafile. 
 
 			The first step of BRL, accomplished by the function \code{\link{compareRecords}}, consists of constructing comparison vectors for each pair of records from the two datafiles.  
-		The current implementation uses binary comparisons for 
-			fields of class \code{factor}, and Levenshtein-based comparisons for fields of class \code{character}.  
+		The current implementation allows binary comparisons (agree/disagree)  
+			and Levenshtein-based comparisons.  
 			This can be easily extended to other comparison types, so a resourceful user should be able to construct an object that recreates 
 			the output of \code{\link{compareRecords}} for other types of comparisons (so long as they get transformed to levels of disagreement), and still be able to run the next step outside 
 			the function \code{BRL}.
@@ -114,7 +133,8 @@ Beta record linkage (BRL, Sadinle, 2017) is a methodology for probabilistic bipa
 \examples{
 data(twoFiles)
 
-(Zhat <- BRL(df1, df2))
+(Zhat <- BRL(df1, df2, flds=c("gname", "fname", "age", "occup"), 
+				types=c("lv","lv","bi","bi")))
 
 n1 <- nrow(df1)
 
@@ -143,7 +163,8 @@ cbind( df1[Zhat[Zhat<=n1],], df2[Zhat<=n1,] )
 ## finally, note that we could run BRL step by step as follows
 
 ## create comparison data 
-myCompData <- compareRecords(df1, df2)
+myCompData <- compareRecords(df1, df2, flds=c("gname", "fname", "age", "occup"), 
+								types=c("lv","lv","bi","bi"))
 
 ## Gibbs sampling from posterior of bipartite matchings
 chain <- bipartiteGibbs(myCompData)

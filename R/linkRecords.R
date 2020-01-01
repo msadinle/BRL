@@ -42,7 +42,8 @@
 #' @examples
 #' data(twoFiles)
 #' 
-#' myCompData <- compareRecords(df1, df2)
+#' myCompData <- compareRecords(df1, df2, flds=c("gname", "fname", "age", "occup"), 
+#' 								types=c("lv","lv","bi","bi"))
 #' 
 #' chain <- bipartiteGibbs(myCompData)
 #' 

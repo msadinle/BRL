@@ -3,16 +3,30 @@
 #' Create comparison vectors for all pairs of records coming from 
 #' two datafiles to be linked.
 #'
-#' @param df1,df2 two data frames to be linked, containing the same number of columns,
-#'				with the same variable names and classes, in the same order.  The columns represent 
-#'				the comparison fields to be used for the linkage.  Currently, only columns of class
-#'				\code{character} and \code{factor} are supported.  Without loss of generality, 
+#' @param df1,df2 two datasets to be linked, of class \code{data.frame}, with rows representing records and columns
+#' 				representing fields.  Without loss of generality, 
 #' 				\code{df1} is assumed to have no less records than \code{df2}.
-#' @param types	a vector of characters indicating the comparison types per comparison field.  The options
-#'				are: \code{"Lev"} for comparisons based on the Levenshtein distance normalized to \eqn{[0,1]}, with \eqn{0}  
+#' @param flds	a vector indicating the fields to be used in the linkage.  Either a \code{character} vector, in which case  
+#' 				all entries need to be names of columns of \code{df1} and \code{df2}, or a \code{numeric} vector
+#' 				indicating the columns in \code{df1} and \code{df2} to be used in the linkage.  If provided as a 
+#' 				\code{numeric} vector it is assumed that the columns of \code{df1} and \code{df2} are organized such that 
+#' 				it makes sense to compare the columns
+#' 				\code{df1[,flds]} and \code{df2[,flds]} in that order.  
+#' @param flds1,flds2	vectors indicating the fields of \code{df1} and \code{df2} to be used in the linkage.  
+#' 				Either \code{character} vectors, in which case  
+#' 				all entries need to be names of columns of \code{df1} and \code{df2}, respectively, or \code{numeric} vectors
+#' 				indicating the columns in \code{df1} and \code{df2} to be used in the linkage.  It is assumed that
+#'				it makes sense to compare the columns
+#' 				\code{df1[,flds1]} and \code{df2[,flds2]} in that order.  These arguments are ignored if \code{flds} is specified.
+#'				If none of \code{flds,flds1,flds2} are specified, the columns with the same names in \code{df1} and \code{df2} 
+#'				are compared, if any.  
+#' @param types	a vector of characters indicating the comparison type per comparison field.  The options
+#'				are: \code{"lv"} for comparisons based on the Levenshtein edit distance normalized to \eqn{[0,1]}, with \eqn{0}  
 #'				indicating no disagreement and \eqn{1} indicating maximum disagreement; and 
-#'				\code{"bin"} for binary comparisons (agreement/disagreement). 
-#' 				The default is \code{"Lev"} for columns of class \code{character} and \code{"bin"} for columns of class \code{factor}.
+#'				\code{"bi"} for binary comparisons (agreement/disagreement). 
+#' 				The default is \code{"lv"}.  Fields compared with the \code{"lv"} option are first transformed to \code{character}
+#'				class.  Factors with different levels compared using the \code{"bi"} option are transformed to factors with the union 
+#' 				of the levels.
 #' @param breaks	for comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
 #'				points for the interval \eqn{[0,1]} to obtain \eqn{L+1} levels of disagreement.
 #'				The default is \code{breaks=c(.001,.25,.5)}.
@@ -20,13 +34,16 @@
 #' \describe{
 #'   \item{\code{comparisons}}{
 #' 						matrix with \code{n1*n2} rows, where the comparison pattern for record pair \eqn{(i,j)}
-#'						appears in row \code{(j-1)*n1+i}, for \eqn{i} in \eqn{{1,\dots,n1}}, and \eqn{j} in \eqn{{1,\dots,n2}}.  A comparison field with \eqn{L+1} levels of disagreement, 
+#'						appears in row \code{(j-1)*n1+i}, for \eqn{i} in \eqn{{1,\dots,n1}}, and \eqn{j} in \eqn{{1,\dots,n2}}.  
+#'						A comparison field with \eqn{L+1} levels of disagreement, 
 #'						is represented by \eqn{L+1} columns of TRUE/FALSE indicators.  Missing comparisons are coded as FALSE,
 #'						which is justified under an assumption of ignorability of the missing comparisons, see Sadinle (2017).
 #'						}
 #'   \item{\code{n1,n2}}{the datafile sizes, \code{n1 = nrow(df1)} and \code{n2 = nrow(df2)}.}
 #'   \item{\code{nDisagLevs}}{a vector containing the number of levels of
 #'					 	disagreement per comparison field.}
+#'   \item{\code{compFields}}{a data.frame containing the names of the fields in the datafiles used in the comparisons 
+#'					 	and the types of comparison.}
 #' }
 #' 
 #' @references Mauricio Sadinle (2017). Bayesian Estimation of Bipartite Matchings for Record Linkage. \emph{Journal of the
@@ -35,89 +52,166 @@
 #' @examples
 #' data(twoFiles)
 #' 
-#' myCompData <- compareRecords(df1, df2, types=c("Lev","Lev","bin","bin"), breaks=c(.001,.25,.5))
+#' myCompData <- compareRecords(df1, df2, flds=c("gname", "fname", "age", "occup"),
+#'					types=c("lv","lv","bi","bi"), breaks=c(.001,.25,.5))
 #' 
 #' ## same as 
-#' myCompData <- compareRecords(df1, df2)
+#' myCompData <- compareRecords(df1, df2, types=c("lv","lv","bi","bi"))
 
-compareRecords <- function(df1, df2, types=NULL, breaks=c(.001,.25,.5)){
+compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NULL, breaks=c(.001,.25,.5)){
+	
+	warn <- FALSE
 	
 	# control the input
 	
-	if(!is.data.frame(df1)) stop("df1 is not a data frame")
-	if(!is.data.frame(df2)) stop("df2 is not a data frame")
+	if(!is.data.frame(df1)) stop("'df1' is not a data frame")
+	if(!is.data.frame(df2)) stop("'df2' is not a data frame")
 	
-	if(ncol(df1)!=ncol(df2)) stop("df1 and df2 have different numbers of columns")
-	
-	if( any(names(df1) != names(df1)) ) stop("df1 and df2 have different column names")
-	
-	df1ColClass <- sapply(df1, class)
-	df2ColClass <- sapply(df2, class)
-	
-	if( any(df1ColClass != df2ColClass) ) stop("df1 and df2 have different column classes")
-	
-	if( !(all(df1ColClass %in% c("character", "factor"))) )
-		stop("Some columns in df1 are not of class character or factor")
+	if(!is.null(flds)){ # user provides 'flds' fields in 'df1' and 'df2' for linkage 
+		if( !(class(flds) %in% c("character", "numeric")) )
+			stop("'flds' should be of class character or numeric")
 		
-	if( !(all(df2ColClass %in% c("character", "factor"))) )
-		stop("Some columns in df2 are not of class character or factor")
+		if(!is.null(flds1)) warning("Argument 'flds' was provided, 'flds1' is ignored")
+		if(!is.null(flds2)) warning("Argument 'flds' was provided, 'flds2' is ignored")
+		
+		flds1 <- flds2 <- flds
+		
+		if(is.numeric(flds)){
+			fldsCheck1 <- flds %in% seq_len(ncol(df1))
+			if(!all(fldsCheck1)) stop("Some numbers in 'flds' are out of the column range for 'df1'")
+			fldsCheck2 <- flds %in% seq_len(ncol(df2))
+			if(!all(fldsCheck2)) stop("Some numbers in 'flds' are out of the column range for 'df2'")
+			warn <- TRUE
+		}
+		if(is.character(flds)){
+			fldsCheck1 <- flds %in% colnames(df1)
+			if(!all(fldsCheck1)) stop("Some names in 'flds' are not columns of 'df1'")
+			fldsCheck2 <- flds %in% colnames(df2)
+			if(!all(fldsCheck2)) stop("Some names in 'flds' are not columns of 'df2'")
+			flds1 <- match(flds1, colnames(df1))
+			flds2 <- match(flds2, colnames(df2))
+		}
+	}else{
+		if(is.null(flds1) & !is.null(flds2)) stop("Argument 'flds1' also needs to be specified")
+		if(is.null(flds2) & !is.null(flds1)) stop("Argument 'flds2' also needs to be specified")
+		if(is.null(flds2) & is.null(flds2)){
+			flds1 <- flds2 <- intersect(colnames(df1), colnames(df2))
+			if(length(flds1)==0)
+				stop("'df1' and 'df2' do not have fields with the same names")
+			flds1 <- match(flds1, colnames(df1))
+			flds2 <- match(flds2, colnames(df2))
+		}else{ # user provides 'flds1' and 'flds2' fields in 'df1' and 'df2' for linkage 
+			if( !(class(flds1) %in% c("character", "numeric")) )
+				stop("'flds1' should be of class character or numeric")
+			if( !(class(flds2) %in% c("character", "numeric")) )
+				stop("'flds2' should be of class character or numeric")
+			if(is.numeric(flds1)){
+				flds1Check <- flds1 %in% seq_len(ncol(df1))
+				if(!all(flds1Check)) stop("Some numbers in 'flds1' are out of the column range for 'df1'")
+			}
+			if(is.numeric(flds2)){
+				flds2Check <- flds2 %in% seq_len(ncol(df2))
+				if(!all(flds2Check)) stop("Some numbers in 'flds2' are out of the column range for 'df2'")
+			}
+			if(is.character(flds1)){
+				flds1Check <- flds1 %in% colnames(df1)
+				if(!all(flds1Check)) stop("Some names in 'flds1' are not columns of 'df1'")
+				flds1 <- match(flds1, colnames(df1))
+			}
+			if(is.character(flds2)){
+				flds2Check <- flds2 %in% colnames(df2)
+				if(!all(flds2Check)) stop("Some names in 'flds2' are not columns of 'df2'")
+				flds2 <- match(flds2, colnames(df2))
+			}
+			if(length(flds1)!=length(flds2)) stop("'flds1' and 'flds2' should have the same length")
+		}
+	}
 	
 	n1 <- nrow(df1)
 	n2 <- nrow(df2)
 	
-	if(n2 > n1) stop("df2 has more records than df1")
+	if(n2 > n1) stop("'df2' has more records than 'df1'")
+
+	F <- length(flds1)
 	
-	if(is.null(types)) types <- c("Lev","bin")[match(df1ColClass, c("character", "factor"))]
+	if(is.null(types)) types <- rep("lv",F)
 	
-	F <- length(types)
-	
-	if(F != ncol(df1)) 
-		stop("Vector length of specified comparison types does not match number of datafile columns")
+	if(F != length(types)) 
+		stop("Length of 'types' does not equal number of fields used for comparison")
 		
-	if( any( !(types %in% c("Lev","bin")) ) ) 
-		stop("types should be a character vector of 'Lev' and/or 'bin' indicating Levenshtein-based or binary comparisons")
+	if( any( !(types %in% c("lv","bi")) ) ) 
+		stop("'types' should be a character vector of 'lv' and/or 'bi' indicating Levenshtein-based or binary comparisons")
 	
-	if( any(breaks < 0 | breaks > 1) ) stop("breaks should be a vector of numbers in [0,1]")
+	if( any(breaks < 0 | breaks > 1) ) stop("'breaks' should be a vector of numbers in [0,1]")
 	
-	n <- n1 + n2
 	breaks <- c(-Inf,breaks,Inf)
 	
 	pairInds1 <- rep(1:n1, n2) 
 	pairInds2 <- rep(1:n2, each=n1)
 	
-	compareRecords <- list()
+	comparisons <- list()
 	
 	for(fld in 1:F){
-		if(types[fld]=="bin"){
+		c1 <- class(df1[,flds1[fld]])
+		c2 <- class(df2[,flds2[fld]])
+		if(types[fld]=="bi"){
 		# computing agreement levels for binary comparisons
-			same <- df1[pairInds1,fld] == df2[pairInds2,fld]
+			if( c1 != c2 )
+				warning(paste("Columns '", colnames(df1)[flds1[fld]], "' in 'df1' and '" , 
+					colnames(df2)[flds2[fld]], "' in 'df2' are of different classes", sep=""))
+			if( (c1 == "factor")&(c2 == "factor") ){
+				levs1 <- sort(levels(df1[,flds1[fld]]))
+				levs2 <- sort(levels(df2[,flds2[fld]]))
+				if(!identical(levs1,levs2)){
+					warning(paste("Columns '", colnames(df1)[flds1[fld]], "' in 'df1' and '" , 
+						colnames(df2)[flds2[fld]], "' in 'df2' are factors with different levels", sep=""))
+					unilevs <- union(levs1,levs2)
+					df1[,flds1[fld]] <- factor(df1[,flds1[fld]], levels = unilevs)
+					df2[,flds2[fld]] <- factor(df2[,flds2[fld]], levels = unilevs)
+				}
+			}
+			same <- df1[pairInds1,flds1[fld]] == df2[pairInds2,flds2[fld]]
 			AgrLev <- 1*same
 			AgrLev[!same] <- 2
-			compareRecords[[fld]] <- as.factor(AgrLev)
+			comparisons[[fld]] <- as.factor(AgrLev)
 		}else{
 		# computing agreement levels for Levenshtein-based comparisons
-			df1[,fld] <- as.character(df1[,fld])
-			df2[,fld] <- as.character(df2[,fld])
+			df1[,flds1[fld]] <- as.character(df1[,flds1[fld]])
+			df2[,flds2[fld]] <- as.character(df2[,flds2[fld]])
 			
 			# adist in the utils package returns the matrix of Levenshtein distances
-			lvd <- as.numeric(adist(df1[,fld], df2[,fld]))/
-					pmax(nchar(df1[,fld])[pairInds1], nchar(df2[,fld])[pairInds2])
+			lvd <- as.numeric(adist(df1[,flds1[fld]], df2[,flds2[fld]]))/
+					pmax(nchar(df1[,flds1[fld]])[pairInds1], nchar(df2[,flds2[fld]])[pairInds2])
 			
 			AgrLev <- cut(lvd, breaks=breaks, labels=seq_len(length(breaks)-1))
-			compareRecords[[fld]] <- as.factor(AgrLev)
+			comparisons[[fld]] <- as.factor(AgrLev)
 		}
 	}
 	
-	nDisagLevs <- sapply(compareRecords, FUN=nlevels)
+	nDisagLevs <- sapply(comparisons, FUN=nlevels)
 		
 	# next four lines compute the binary indicators from the agreement levels
-	xfun <- function(f) paste("(compareRecords[[",f,"]]==",seq_len(nDisagLevs[f]),")")
+	xfun <- function(f) paste("(comparisons[[",f,"]]==",seq_len(nDisagLevs[f]),")")
 	expr1 <- paste(sapply(sapply(seq_len(F),xfun),FUN=paste,collapse=","),collapse=",")
 	expr2 <- paste("cbind(",expr1,")")
 	comparisons <- eval(parse(text=expr2))
 	
 	# replacing NAs by FALSE or zeroes is justified by ignorability and CI assumptions (see Sadinle 2017)
 	comparisons[is.na(comparisons)] <- FALSE 
-
-	return(list(comparisons=comparisons, n1=n1, n2=n2, nDisagLevs=nDisagLevs))
+	
+	df1Fields <- colnames(df1)[flds1]
+	df2Fields <- colnames(df2)[flds2]
+	compFields <- data.frame(file1=df1Fields, file2=df2Fields, types=types)
+	
+	if(any(df1Fields != df2Fields) | warn){
+		warning(paste("The fields '", paste(df1Fields,collapse="' '"), 
+			"' in 'df1' are being compared with the fields '",
+			paste(df2Fields,collapse="' '"), "' in 'df2'",  
+			sep=""))
+	}
+	
+	out <- list(comparisons=comparisons, n1=n1, n2=n2, nDisagLevs=nDisagLevs, 
+				compFields=compFields)
+	
+	return(out)
 }
