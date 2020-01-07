@@ -48,15 +48,22 @@ are compared, if any.}
 
 \item{types}{a vector of characters indicating the comparison type per comparison field.  The options
 are: \code{"lv"} for comparisons based on the Levenshtein edit distance normalized to \eqn{[0,1]}, with \eqn{0}  
-indicating no disagreement and \eqn{1} indicating maximum disagreement; and 
-\code{"bi"} for binary comparisons (agreement/disagreement). 
+indicating no disagreement and \eqn{1} indicating maximum disagreement;  
+\code{"bi"} for binary comparisons (agreement/disagreement); \code{"nu"} for numeric comparisons computed as 
+the absolute difference. 
     The default is \code{"lv"}.  Fields compared with the \code{"lv"} option are first transformed to \code{character}
 class.  Factors with different levels compared using the \code{"bi"} option are transformed to factors with the union 
-    of the levels.}
+    of the levels.  Fields compared with the \code{"nu"} option need to be of class \code{numeric}.}
 
-\item{breaks}{for comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
-points for the interval \eqn{[0,1]} to obtain \eqn{L+1} levels of disagreement.
-The default is \code{breaks=c(.001,.25,.5)}.}
+\item{breaks}{break points for the comparisons to obtain levels of disagreement.  Can be specified as a list or as a numeric vector.
+If a list, it should be of length equal to the number of comparison fields, containing one numeric vector with the break 
+points for each comparison field, where entries corresponding to comparison type \code{"bi"} are ignored.  
+If a numeric vector, it gets used as the break points for all comparison fields of type \code{"lv"} and \code{"nu"},
+which might be meaningful only if all the non-binary comparisons are of a single type, either \code{"lv"} or \code{"nu"}.  
+For comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
+points for the interval \eqn{[0,1]} leads to \eqn{L+1} levels of disagreement.  Similarly, for comparisons based on the absolute 
+difference, the break points are for the interval \eqn{[0,\infty)}.  
+The default is \code{breaks=c(.001,.25,.5)}, which might be meaningful only for comparisons of type \code{"lv"}.}
 
 \item{nIter}{number of iterations of Gibbs sampler.}
 
@@ -101,7 +108,7 @@ Beta record linkage (BRL, Sadinle, 2017) is a methodology for probabilistic bipa
 		each datafile.  This methodology should not be used with datafiles that contain duplicates nor should it be used for deduplicating a single datafile. 
 
 			The first step of BRL, accomplished by the function \code{\link{compareRecords}}, consists of constructing comparison vectors for each pair of records from the two datafiles.  
-		The current implementation allows binary comparisons (agree/disagree)  
+		The current implementation allows binary comparisons (agree/disagree), numerical comparisons based on the absolute difference, 
 			and Levenshtein-based comparisons.  
 			This can be easily extended to other comparison types, so a resourceful user should be able to construct an object that recreates 
 			the output of \code{\link{compareRecords}} for other types of comparisons (so long as they get transformed to levels of disagreement), and still be able to run the next step outside 

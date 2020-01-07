@@ -22,14 +22,21 @@
 #'				are compared, if any.  
 #' @param types	a vector of characters indicating the comparison type per comparison field.  The options
 #'				are: \code{"lv"} for comparisons based on the Levenshtein edit distance normalized to \eqn{[0,1]}, with \eqn{0}  
-#'				indicating no disagreement and \eqn{1} indicating maximum disagreement; and 
-#'				\code{"bi"} for binary comparisons (agreement/disagreement). 
+#'				indicating no disagreement and \eqn{1} indicating maximum disagreement;  
+#'				\code{"bi"} for binary comparisons (agreement/disagreement); \code{"nu"} for numeric comparisons computed as 
+#'				the absolute difference. 
 #' 				The default is \code{"lv"}.  Fields compared with the \code{"lv"} option are first transformed to \code{character}
 #'				class.  Factors with different levels compared using the \code{"bi"} option are transformed to factors with the union 
-#' 				of the levels.
-#' @param breaks	for comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
-#'				points for the interval \eqn{[0,1]} to obtain \eqn{L+1} levels of disagreement.
-#'				The default is \code{breaks=c(.001,.25,.5)}.
+#' 				of the levels.  Fields compared with the \code{"nu"} option need to be of class \code{numeric}.
+#' @param breaks	break points for the comparisons to obtain levels of disagreement.  Can be specified as a list or as a numeric vector.
+#'				If a list, it should be of length equal to the number of comparison fields, containing one numeric vector with the break 
+#'				points for each comparison field, where entries corresponding to comparison type \code{"bi"} are ignored.  
+#'				If a numeric vector, it gets used as the break points for all comparison fields of type \code{"lv"} and \code{"nu"},
+#'				which might be meaningful only if all the non-binary comparisons are of a single type, either \code{"lv"} or \code{"nu"}.  
+#'				For comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
+#'				points for the interval \eqn{[0,1]} leads to \eqn{L+1} levels of disagreement.  Similarly, for comparisons based on the absolute 
+#'				difference, the break points are for the interval \eqn{[0,\infty)}.  
+#'				The default is \code{breaks=c(.001,.25,.5)}, which might be meaningful only for comparisons of type \code{"lv"}.
 #' @return a list containing: 
 #' \describe{
 #'   \item{\code{comparisons}}{
@@ -138,13 +145,50 @@ compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NU
 	
 	if(F != length(types)) 
 		stop("Length of 'types' does not equal number of fields used for comparison")
-		
-	if( any( !(types %in% c("lv","bi")) ) ) 
-		stop("'types' should be a character vector of 'lv' and/or 'bi' indicating Levenshtein-based or binary comparisons")
 	
-	if( any(breaks < 0 | breaks > 1) ) stop("'breaks' should be a vector of numbers in [0,1]")
+	if( (!is.character(types)) | any( !(types %in% c("lv","bi","nu")) ) ) 
+		stop("'types' should be a character vector of 'lv', 'bi', and/or 'nu' indicating Levenshtein-based, 
+		binary, or numeric comparisons")
 	
-	breaks <- c(-Inf,breaks,Inf)
+	c1 <- sapply(df1[,flds1], class)
+	c2 <- sapply(df2[,flds2], class)
+	
+	if( any(types=="nu") & any(c1[types=="nu", drop=FALSE] != "numeric") )
+		stop(paste("Numeric comparison requested for columns '", paste(colnames(df1)[flds1[types=="nu"]],collapse="' '"), 
+			"' in 'df1', but at least one of these is not numeric", sep=""))
+	
+	if( any(types=="nu") & any(c2[types=="nu", drop=FALSE] != "numeric") )
+		stop(paste("Numeric comparison requested for columns '", paste(colnames(df2)[flds2[types=="nu"]],collapse="' '"), 
+			"' in 'df2', but at least one of these is not numeric", sep=""))
+	
+	if( !(class(breaks) %in% c("list", "numeric")) )
+		stop("'breaks' should be of class list or numeric")
+	
+	if( class(breaks) == "list" ){ # if user specifies list with breaks for each comparison field
+		if(length(breaks) != F)
+			stop("When 'breaks' is specified as a list, it should have length equal to the number of comparison fields")
+		for(fld in 1:F){
+			if(types[fld]=="lv"){
+				if( (!is.numeric(breaks[[fld]])) | any(breaks[[fld]] < 0 | breaks[[fld]] > 1) ) 
+					stop(paste("'types[",fld,"]' specified as 'lv', so 'breaks[[",fld,"]]' should be a vector of numbers in [0,1]",
+						sep=""))
+				breaks[[fld]] <- unique(c(-Inf,breaks[[fld]],Inf))
+			}
+			if(types[fld]=="nu"){
+				if( (!is.numeric(breaks[[fld]])) | any(breaks[[fld]] < 0) ) 
+					stop(paste("'types[",fld,"]' specified as 'nu', so 'breaks[[",fld,"]]' should be a vector of non-negative numbers",
+						sep=""))
+				breaks[[fld]] <- unique(c(-Inf,breaks[[fld]],Inf))
+			}
+		}
+	}else{ # if user specifies only one vector with breaks for all non-binary comparison field
+		if( any(breaks < 0) ) 
+			stop("When 'breaks' is specified as a numeric vector, it should contain non-negative numbers")
+		breaks <- unique(c(-Inf,breaks,Inf))
+		breaks1 <- list()
+		breaks1[1:F] <- list(breaks)
+		breaks <- breaks1
+	}
 	
 	pairInds1 <- rep(1:n1, n2) 
 	pairInds2 <- rep(1:n2, each=n1)
@@ -152,14 +196,12 @@ compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NU
 	comparisons <- list()
 	
 	for(fld in 1:F){
-		c1 <- class(df1[,flds1[fld]])
-		c2 <- class(df2[,flds2[fld]])
 		if(types[fld]=="bi"){
 		# computing agreement levels for binary comparisons
-			if( c1 != c2 )
+			if( c1[fld] != c2[fld] )
 				warning(paste("Columns '", colnames(df1)[flds1[fld]], "' in 'df1' and '" , 
 					colnames(df2)[flds2[fld]], "' in 'df2' are of different classes", sep=""))
-			if( (c1 == "factor")&(c2 == "factor") ){
+			if( (c1[fld] == "factor")&(c2[fld] == "factor") ){
 				levs1 <- sort(levels(df1[,flds1[fld]]))
 				levs2 <- sort(levels(df2[,flds2[fld]]))
 				if(!identical(levs1,levs2)){
@@ -174,7 +216,13 @@ compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NU
 			AgrLev <- 1*same
 			AgrLev[!same] <- 2
 			comparisons[[fld]] <- as.factor(AgrLev)
-		}else{
+		}
+		if(types[fld]=="nu"){
+			absDiff <- abs(df1[pairInds1,flds1[fld]] - df2[pairInds2,flds2[fld]])
+			AgrLev <- cut(absDiff, breaks=breaks[[fld]], labels=seq_len(length(breaks[[fld]])-1))
+			comparisons[[fld]] <- as.factor(AgrLev)			
+		}
+		if(types[fld]=="lv"){
 		# computing agreement levels for Levenshtein-based comparisons
 			df1[,flds1[fld]] <- as.character(df1[,flds1[fld]])
 			df2[,flds2[fld]] <- as.character(df2[,flds2[fld]])
@@ -183,7 +231,7 @@ compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NU
 			lvd <- as.numeric(adist(df1[,flds1[fld]], df2[,flds2[fld]]))/
 					pmax(nchar(df1[,flds1[fld]])[pairInds1], nchar(df2[,flds2[fld]])[pairInds2])
 			
-			AgrLev <- cut(lvd, breaks=breaks, labels=seq_len(length(breaks)-1))
+			AgrLev <- cut(lvd, breaks=breaks[[fld]], labels=seq_len(length(breaks[[fld]])-1))
 			comparisons[[fld]] <- as.factor(AgrLev)
 		}
 	}

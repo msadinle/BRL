@@ -7,13 +7,16 @@
 #' \describe{
 #'   \item{\code{comparisons}}{
 #' 						matrix with \code{n1*n2} rows, where the comparison pattern for record pair \eqn{(i,j)}
-#'						appears in row \code{(j-1)*n1+i}, for \eqn{i} in \eqn{{1,\dots,n1}}, and \eqn{j} in \eqn{{1,\dots,n2}}.  A comparison field with \eqn{L+1} levels of disagreement, 
+#'						appears in row \code{(j-1)*n1+i}, for \eqn{i} in \eqn{{1,\dots,n1}}, and \eqn{j} in \eqn{{1,\dots,n2}}.  
+#'						A comparison field with \eqn{L+1} levels of disagreement, 
 #'						is represented by \eqn{L+1} columns of TRUE/FALSE indicators.  Missing comparisons are coded as FALSE,
 #'						which is justified under an assumption of ignorability of the missing comparisons, see Sadinle (2017).
 #'						}
 #'   \item{\code{n1,n2}}{the datafile sizes, \code{n1 = nrow(df1)} and \code{n2 = nrow(df2)}.}
 #'   \item{\code{nDisagLevs}}{a vector containing the number of levels of
 #'					 	disagreement per comparison field.}
+#'   \item{\code{compFields}}{a data.frame containing the names of the fields in the datafiles used in the comparisons 
+#'					 	and the types of comparison.}
 #' }
 #' @param nIter	number of iterations of Gibbs sampler.
 #' @param a,b	hyper-parameters of the Dirichlet priors for the \eqn{m} and \eqn{u} parameters
