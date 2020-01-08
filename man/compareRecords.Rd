@@ -11,7 +11,7 @@ compareRecords(
   flds1 = NULL,
   flds2 = NULL,
   types = NULL,
-  breaks = c(0.001, 0.25, 0.5)
+  breaks = c(0, 0.25, 0.5)
 )
 }
 \arguments{
@@ -44,15 +44,18 @@ the absolute difference.
 class.  Factors with different levels compared using the \code{"bi"} option are transformed to factors with the union 
     of the levels.  Fields compared with the \code{"nu"} option need to be of class \code{numeric}.}
 
-\item{breaks}{break points for the comparisons to obtain levels of disagreement.  Can be specified as a list or as a numeric vector.
-If a list, it should be of length equal to the number of comparison fields, containing one numeric vector with the break 
+\item{breaks}{break points for the comparisons to obtain levels of disagreement.
+It can be a list of length equal to the number of comparison fields, containing one numeric vector with the break 
 points for each comparison field, where entries corresponding to comparison type \code{"bi"} are ignored.  
-If a numeric vector, it gets used as the break points for all comparison fields of type \code{"lv"} and \code{"nu"},
+It can also be a named list of length two with elements 'lv' and 'nu' 
+containing numeric vectors with the break 
+points for all Levenshtein-based and numeric comparisons, respectively.  
+Finally, it can be a numeric vector with the break points for all comparison fields of type \code{"lv"} and \code{"nu"},
 which might be meaningful only if all the non-binary comparisons are of a single type, either \code{"lv"} or \code{"nu"}.  
 For comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
 points for the interval \eqn{[0,1]} leads to \eqn{L+1} levels of disagreement.  Similarly, for comparisons based on the absolute 
 difference, the break points are for the interval \eqn{[0,\infty)}.  
-The default is \code{breaks=c(.001,.25,.5)}, which might be meaningful only for comparisons of type \code{"lv"}.}
+The default is \code{breaks=c(0,.25,.5)}, which might be meaningful only for comparisons of type \code{"lv"}.}
 }
 \value{
 a list containing: 
@@ -67,7 +70,7 @@ a list containing:
   \item{\code{n1,n2}}{the datafile sizes, \code{n1 = nrow(df1)} and \code{n2 = nrow(df2)}.}
   \item{\code{nDisagLevs}}{a vector containing the number of levels of
 				 	disagreement per comparison field.}
-  \item{\code{compFields}}{a data.frame containing the names of the fields in the datafiles used in the comparisons 
+  \item{\code{compFields}}{a data frame containing the names of the fields in the datafiles used in the comparisons 
 				 	and the types of comparison.}
 }
 }
@@ -78,11 +81,30 @@ two datafiles to be linked.
 \examples{
 data(twoFiles)
 
-myCompData <- compareRecords(df1, df2, flds=c("gname", "fname", "age", "occup"),
-				types=c("lv","lv","bi","bi"), breaks=c(.001,.25,.5))
+myCompData <- compareRecords(df1, df2, 
+                             flds=c("gname", "fname", "age", "occup"),
+                             types=c("lv","lv","bi","bi"), 
+                             breaks=c(0,.25,.5))
 
 ## same as 
 myCompData <- compareRecords(df1, df2, types=c("lv","lv","bi","bi"))
+
+
+## let's transform 'occup' to numeric to illustrate how to obtain numeric comparisons 
+df1$occup <- as.numeric(df1$occup)
+df2$occup <- as.numeric(df2$occup)
+
+## using different break points for 'lv' and 'nu' comparisons 
+myCompData1 <- compareRecords(df1, df2, 
+                              flds=c("gname", "fname", "age", "occup"),
+                              types=c("lv","lv","bi","nu"), 
+                              breaks=list(lv=c(0,.25,.5), nu=0:3))
+
+## using different break points for each comparison field
+myCompData2 <- compareRecords(df1, df2, 
+                              flds=c("gname", "fname", "age", "occup"),
+                              types=c("lv","lv","bi","nu"), 
+                              breaks=list(c(0,.25,.5), c(0,.2,.4,.6), NULL, 0:3))
 }
 \references{
 Mauricio Sadinle (2017). Bayesian Estimation of Bipartite Matchings for Record Linkage. \emph{Journal of the

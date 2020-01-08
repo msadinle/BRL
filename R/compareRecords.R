@@ -28,15 +28,18 @@
 #' 				The default is \code{"lv"}.  Fields compared with the \code{"lv"} option are first transformed to \code{character}
 #'				class.  Factors with different levels compared using the \code{"bi"} option are transformed to factors with the union 
 #' 				of the levels.  Fields compared with the \code{"nu"} option need to be of class \code{numeric}.
-#' @param breaks	break points for the comparisons to obtain levels of disagreement.  Can be specified as a list or as a numeric vector.
-#'				If a list, it should be of length equal to the number of comparison fields, containing one numeric vector with the break 
+#' @param breaks	break points for the comparisons to obtain levels of disagreement.  
+#'				It can be a list of length equal to the number of comparison fields, containing one numeric vector with the break 
 #'				points for each comparison field, where entries corresponding to comparison type \code{"bi"} are ignored.  
-#'				If a numeric vector, it gets used as the break points for all comparison fields of type \code{"lv"} and \code{"nu"},
+#'				It can also be a named list of length two with elements 'lv' and 'nu' 
+#'				containing numeric vectors with the break 
+#'				points for all Levenshtein-based and numeric comparisons, respectively.  
+#'				Finally, it can be a numeric vector with the break points for all comparison fields of type \code{"lv"} and \code{"nu"},
 #'				which might be meaningful only if all the non-binary comparisons are of a single type, either \code{"lv"} or \code{"nu"}.  
 #'				For comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
 #'				points for the interval \eqn{[0,1]} leads to \eqn{L+1} levels of disagreement.  Similarly, for comparisons based on the absolute 
 #'				difference, the break points are for the interval \eqn{[0,\infty)}.  
-#'				The default is \code{breaks=c(.001,.25,.5)}, which might be meaningful only for comparisons of type \code{"lv"}.
+#'				The default is \code{breaks=c(0,.25,.5)}, which might be meaningful only for comparisons of type \code{"lv"}.
 #' @return a list containing: 
 #' \describe{
 #'   \item{\code{comparisons}}{
@@ -49,7 +52,7 @@
 #'   \item{\code{n1,n2}}{the datafile sizes, \code{n1 = nrow(df1)} and \code{n2 = nrow(df2)}.}
 #'   \item{\code{nDisagLevs}}{a vector containing the number of levels of
 #'					 	disagreement per comparison field.}
-#'   \item{\code{compFields}}{a data.frame containing the names of the fields in the datafiles used in the comparisons 
+#'   \item{\code{compFields}}{a data frame containing the names of the fields in the datafiles used in the comparisons 
 #'					 	and the types of comparison.}
 #' }
 #' 
@@ -59,13 +62,32 @@
 #' @examples
 #' data(twoFiles)
 #' 
-#' myCompData <- compareRecords(df1, df2, flds=c("gname", "fname", "age", "occup"),
-#'					types=c("lv","lv","bi","bi"), breaks=c(.001,.25,.5))
+#' myCompData <- compareRecords(df1, df2, 
+#'                              flds=c("gname", "fname", "age", "occup"),
+#'                              types=c("lv","lv","bi","bi"), 
+#'                              breaks=c(0,.25,.5))
 #' 
 #' ## same as 
 #' myCompData <- compareRecords(df1, df2, types=c("lv","lv","bi","bi"))
+#' 
+#' 
+#' ## let's transform 'occup' to numeric to illustrate how to obtain numeric comparisons 
+#' df1$occup <- as.numeric(df1$occup)
+#' df2$occup <- as.numeric(df2$occup)
+#' 
+#' ## using different break points for 'lv' and 'nu' comparisons 
+#' myCompData1 <- compareRecords(df1, df2, 
+#'                               flds=c("gname", "fname", "age", "occup"),
+#'                               types=c("lv","lv","bi","nu"), 
+#'                               breaks=list(lv=c(0,.25,.5), nu=0:3))
+#' 
+#' ## using different break points for each comparison field
+#' myCompData2 <- compareRecords(df1, df2, 
+#'                               flds=c("gname", "fname", "age", "occup"),
+#'                               types=c("lv","lv","bi","nu"), 
+#'                               breaks=list(c(0,.25,.5), c(0,.2,.4,.6), NULL, 0:3))
 
-compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NULL, breaks=c(.001,.25,.5)){
+compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NULL, breaks=c(0,.25,.5)){
 	
 	warn <- FALSE
 	
@@ -164,26 +186,46 @@ compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NU
 	if( !(class(breaks) %in% c("list", "numeric")) )
 		stop("'breaks' should be of class list or numeric")
 	
-	if( class(breaks) == "list" ){ # if user specifies list with breaks for each comparison field
-		if(length(breaks) != F)
-			stop("When 'breaks' is specified as a list, it should have length equal to the number of comparison fields")
-		for(fld in 1:F){
-			if(types[fld]=="lv"){
-				if( (!is.numeric(breaks[[fld]])) | any(breaks[[fld]] < 0 | breaks[[fld]] > 1) ) 
-					stop(paste("'types[",fld,"]' specified as 'lv', so 'breaks[[",fld,"]]' should be a vector of numbers in [0,1]",
-						sep=""))
-				breaks[[fld]] <- unique(c(-Inf,breaks[[fld]],Inf))
+	if( class(breaks) == "list" ){ # if user specifies list with breaks 
+		if(length(breaks) == F){ # breaks for each comparison field
+			for(fld in 1:F){ # check the breaks provided for each field
+				if(types[fld]=="lv"){
+					if( (!is.numeric(breaks[[fld]])) | any(breaks[[fld]] < 0 | breaks[[fld]] > 1) ) 
+						stop(paste("'types[",fld,"]' specified as 'lv', so 'breaks[[",fld,"]]' should be a vector of numbers in [0,1]",
+							sep=""))
+					breaks[[fld]] <- unique(c(-Inf,breaks[[fld]],Inf))
+				}
+				if(types[fld]=="nu"){
+					if( (!is.numeric(breaks[[fld]])) | any(breaks[[fld]] < 0) ) 
+						stop(paste("'types[",fld,"]' specified as 'nu', so 'breaks[[",fld,"]]' should be a vector of non-negative numbers",
+							sep=""))
+					breaks[[fld]] <- unique(c(-Inf,breaks[[fld]],Inf))
+				}
 			}
-			if(types[fld]=="nu"){
-				if( (!is.numeric(breaks[[fld]])) | any(breaks[[fld]] < 0) ) 
-					stop(paste("'types[",fld,"]' specified as 'nu', so 'breaks[[",fld,"]]' should be a vector of non-negative numbers",
-						sep=""))
-				breaks[[fld]] <- unique(c(-Inf,breaks[[fld]],Inf))
-			}
+		}else{ # if length of list is not F, then list needs to be named with elements 'lv' and 'nu'
+			if( (length(breaks) != 2) | (!all(names(breaks) %in% c("lv","nu"))) )
+				stop("When 'breaks' is specified as a list, it should either have length equal to the number of comparison fields, or be a named list with elements 'lv' and 'nu'")
+			if( (!is.numeric(breaks$lv)) | any(breaks$lv < 0 | breaks$lv > 1) ) 
+				stop("'breaks$lv should be a vector of numbers in [0,1]")
+			breaks$lv <- unique(c(-Inf,breaks$lv,Inf))
+			if( (!is.numeric(breaks$nu)) | any(breaks$nu < 0) ) 
+				stop("'breaks$nu should be a vector of non-negative numbers")
+			breaks$nu <- unique(c(-Inf,breaks$nu,Inf))
+			
+			breaks1 <- list()
+			breaks1[1:F] <- list(NULL)
+			breaks1[types=="nu"] <- list(breaks$nu)
+			breaks1[types=="lv"] <- list(breaks$lv)
+			breaks <- breaks1
 		}
-	}else{ # if user specifies only one vector with breaks for all non-binary comparison field
+	}
+	
+	if( class(breaks) == "numeric" ){ # if user specifies only one vector with breaks for all non-binary comparison fields
 		if( any(breaks < 0) ) 
 			stop("When 'breaks' is specified as a numeric vector, it should contain non-negative numbers")
+		if( all(types %in% c("lv","bi")) & any(breaks > 1) )
+			stop("When 'breaks' is specified as a numeric vector, it should contain numbers in [0,1] if all the non-binary comparisons in 'types' are 'lv'")
+		
 		breaks <- unique(c(-Inf,breaks,Inf))
 		breaks1 <- list()
 		breaks1[1:F] <- list(breaks)
@@ -228,7 +270,7 @@ compareRecords <- function(df1, df2, flds=NULL, flds1=NULL, flds2=NULL, types=NU
 			df2[,flds2[fld]] <- as.character(df2[,flds2[fld]])
 			
 			# adist in the utils package returns the matrix of Levenshtein distances
-			lvd <- as.numeric(adist(df1[,flds1[fld]], df2[,flds2[fld]]))/
+			lvd <- as.numeric(utils::adist(df1[,flds1[fld]], df2[,flds2[fld]]))/
 					pmax(nchar(df1[,flds1[fld]])[pairInds1], nchar(df2[,flds2[fld]])[pairInds2])
 			
 			AgrLev <- cut(lvd, breaks=breaks[[fld]], labels=seq_len(length(breaks[[fld]])-1))

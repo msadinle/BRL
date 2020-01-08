@@ -11,7 +11,7 @@ BRL(
   flds1 = NULL,
   flds2 = NULL,
   types = NULL,
-  breaks = c(0.001, 0.25, 0.5),
+  breaks = c(0, 0.25, 0.5),
   nIter = 1000,
   burn = round(nIter * 0.1),
   a = 1,
@@ -55,15 +55,18 @@ the absolute difference.
 class.  Factors with different levels compared using the \code{"bi"} option are transformed to factors with the union 
     of the levels.  Fields compared with the \code{"nu"} option need to be of class \code{numeric}.}
 
-\item{breaks}{break points for the comparisons to obtain levels of disagreement.  Can be specified as a list or as a numeric vector.
-If a list, it should be of length equal to the number of comparison fields, containing one numeric vector with the break 
+\item{breaks}{break points for the comparisons to obtain levels of disagreement.
+It can be a list of length equal to the number of comparison fields, containing one numeric vector with the break 
 points for each comparison field, where entries corresponding to comparison type \code{"bi"} are ignored.  
-If a numeric vector, it gets used as the break points for all comparison fields of type \code{"lv"} and \code{"nu"},
+It can also be a named list of length two with elements 'lv' and 'nu' 
+containing numeric vectors with the break 
+points for all Levenshtein-based and numeric comparisons, respectively.  
+Finally, it can be a numeric vector with the break points for all comparison fields of type \code{"lv"} and \code{"nu"},
 which might be meaningful only if all the non-binary comparisons are of a single type, either \code{"lv"} or \code{"nu"}.  
 For comparisons based on the normalized Levenshtein distance, a vector of length \eqn{L} of break 
 points for the interval \eqn{[0,1]} leads to \eqn{L+1} levels of disagreement.  Similarly, for comparisons based on the absolute 
 difference, the break points are for the interval \eqn{[0,\infty)}.  
-The default is \code{breaks=c(.001,.25,.5)}, which might be meaningful only for comparisons of type \code{"lv"}.}
+The default is \code{breaks=c(0,.25,.5)}, which might be meaningful only for comparisons of type \code{"lv"}.}
 
 \item{nIter}{number of iterations of Gibbs sampler.}
 
@@ -170,8 +173,9 @@ cbind( df1[Zhat[Zhat<=n1],], df2[Zhat<=n1,] )
 ## finally, note that we could run BRL step by step as follows
 
 ## create comparison data 
-myCompData <- compareRecords(df1, df2, flds=c("gname", "fname", "age", "occup"), 
-								types=c("lv","lv","bi","bi"))
+myCompData <- compareRecords(df1, df2, 
+                             flds=c("gname", "fname", "age", "occup"), 
+                             types=c("lv","lv","bi","bi"))
 
 ## Gibbs sampling from posterior of bipartite matchings
 chain <- bipartiteGibbs(myCompData)
@@ -185,4 +189,9 @@ identical(Zhat, Zhat2)
 \references{
 Mauricio Sadinle (2017). Bayesian Estimation of Bipartite Matchings for Record Linkage. \emph{Journal of the
 American Statistical Association} 112(518), 600-612.
+}
+\seealso{
+\code{\link{compareRecords}} for examples on how to work with different types of comparison data, 
+			\code{\link{bipartiteGibbs}} for Gibbs sampler on bipartite matchings, and \code{\link{linkRecords}} for examples 
+		on full and partial point estimates of the true bipartite matching that indicates which records to link.
 }

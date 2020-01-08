@@ -15,7 +15,7 @@
 #'   \item{\code{n1,n2}}{the datafile sizes, \code{n1 = nrow(df1)} and \code{n2 = nrow(df2)}.}
 #'   \item{\code{nDisagLevs}}{a vector containing the number of levels of
 #'					 	disagreement per comparison field.}
-#'   \item{\code{compFields}}{a data.frame containing the names of the fields in the datafiles used in the comparisons 
+#'   \item{\code{compFields}}{a data frame containing the names of the fields in the datafiles used in the comparisons 
 #'					 	and the types of comparison.}
 #' }
 #' @param nIter	number of iterations of Gibbs sampler.
@@ -43,7 +43,7 @@
 #' data(twoFiles)
 #' 
 #' myCompData <- compareRecords(df1, df2, flds=c("gname", "fname", "age", "occup"), 
-#' 								types=c("lv","lv","bi","bi"))
+#'                              types=c("lv","lv","bi","bi"))
 #' 
 #' chain <- bipartiteGibbs(myCompData)
 

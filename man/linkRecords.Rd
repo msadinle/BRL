@@ -50,7 +50,7 @@ needs to be solved.
 data(twoFiles)
 
 myCompData <- compareRecords(df1, df2, flds=c("gname", "fname", "age", "occup"), 
-								types=c("lv","lv","bi","bi"))
+                             types=c("lv","lv","bi","bi"))
 
 chain <- bipartiteGibbs(myCompData)
 
@@ -59,8 +59,27 @@ chain <- bipartiteGibbs(myCompData)
 ## full estimate of bipartite matching (full linkage)
 fullZhat <- linkRecords(chain$Z[,-c(1:100)], n1=nrow(df1), lFNM=1, lFM1=1, lFM2=2, lR=Inf)
 
-## partial estimate of bipartite matching (partial linkage)
-partialZhat <- linkRecords(chain$Z[,-c(1:100)], n1=nrow(df1), lFNM=1, lFM1=1, lFM2=2, lR=.1)
+## partial estimate of bipartite matching (partial linkage), where 
+## lR=0.5, lFNM=1, lFM1=1 mean that we consider not making a decision for 
+## a record as being half as bad as a false non-match or a false match of type 1
+partialZhat <- linkRecords(chain$Z[,-c(1:100)], n1=nrow(df1), lFNM=1, lFM1=1, lFM2=2, lR=.5)
+
+## for which records the decision is not clear according to this set-up of the losses? 
+undecided <- which(partialZhat == -1)
+df2[undecided,]
+
+## compute frequencies of link options observed in the chain 
+linkOptions <- apply(chain$Z[undecided, -c(1:100)], 1, table)
+linkOptions <- lapply(linkOptions, sort, decreasing=TRUE)
+linkOptionsInds <- lapply(linkOptions, names)
+linkOptionsInds <- lapply(linkOptionsInds, as.numeric)
+linkOptionsFreqs <- lapply(linkOptions, function(x) as.numeric(x)/sum(x))
+
+## first record without decision
+df2[undecided[1],]
+
+## options for this record; row of NAs indicates possibility that record has no match in df1
+cbind(df1[linkOptionsInds[[1]],], prob = round(linkOptionsFreqs[[1]],3) )
 }
 \references{
 Mauricio Sadinle (2017). Bayesian Estimation of Bipartite Matchings for Record Linkage. \emph{Journal of the
