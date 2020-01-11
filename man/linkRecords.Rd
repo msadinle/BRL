@@ -83,5 +83,5 @@ cbind(df1[linkOptionsInds[[1]],], prob = round(linkOptionsFreqs[[1]],3) )
 }
 \references{
 Mauricio Sadinle (2017). Bayesian Estimation of Bipartite Matchings for Record Linkage. \emph{Journal of the
-American Statistical Association} 112(518), 600-612.
+American Statistical Association} 112(518), 600-612. [\href{https://doi.org/10.1080/01621459.2016.1148612}{Published}] [\href{https://arxiv.org/abs/1601.06630}{arXiv}]
 }
